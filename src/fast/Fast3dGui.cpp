@@ -10,7 +10,10 @@
 #include "ship/window/gui/resource/GuiTextureFactory.h"
 #include "ship/resource/File.h"
 
-#ifdef __APPLE__
+#if defined(LUS_XBOX)
+// Xbox has no SDL and no ImGui render backend; the ImGui_Impl* switches below are all behind
+// ENABLE_*/__APPLE__ and compile to no-ops, so the SDL headers aren't needed here.
+#elif defined(__APPLE__)
 #include <SDL_hints.h>
 #include <SDL_video.h>
 #include <imgui_impl_metal.h>
@@ -67,6 +70,7 @@ bool Fast3dGui::SupportsViewports() {
 
 void Fast3dGui::HandleWindowEvents(Fast::WindowEvent event) {
     switch (mImpl.Backend) {
+#if !defined(LUS_XBOX)
         case WindowBackend::FAST3D_SDL_OPENGL:
         case WindowBackend::FAST3D_SDL_METAL:
             ImGui_ImplSDL2_ProcessEvent(static_cast<const SDL_Event*>(event.Sdl.Event));
@@ -74,6 +78,7 @@ void Fast3dGui::HandleWindowEvents(Fast::WindowEvent event) {
             Ship::Mobile::ImGuiProcessEvent(ImGui::GetIO().WantTextInput);
 #endif
             break;
+#endif
 #ifdef ENABLE_DX11
         case WindowBackend::FAST3D_DXGI_DX11:
             ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(event.Win32.Handle), event.Win32.Msg, event.Win32.Param1,
@@ -87,6 +92,7 @@ void Fast3dGui::HandleWindowEvents(Fast::WindowEvent event) {
 
 void Fast3dGui::ImGuiWMInit() {
     switch (mImpl.Backend) {
+#if !defined(LUS_XBOX)
         case WindowBackend::FAST3D_SDL_OPENGL:
             SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
             if (Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger(CVAR_ALLOW_BACKGROUND_INPUTS, 1)) {
@@ -94,6 +100,7 @@ void Fast3dGui::ImGuiWMInit() {
             }
             ImGui_ImplSDL2_InitForOpenGL(static_cast<SDL_Window*>(mImpl.Opengl.Window), mImpl.Opengl.Context);
             break;
+#endif
 #if __APPLE__
         case WindowBackend::FAST3D_SDL_METAL:
             SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
@@ -141,6 +148,20 @@ void Fast3dGui::ImGuiWMShutdown() {
 void Fast3dGui::ImGuiBackendInit() {
     auto window = Ship::Context::GetRawInstance()->GetWindow();
     mInterpreter = std::dynamic_pointer_cast<Fast3dWindow>(window)->GetInterpreterWeak();
+#if defined(LUS_XBOX)
+    // Minimal "null" ImGui backend: no menu rasterization yet, but ImGui::NewFrame() asserts
+    // unless the font atlas is built with a texture id. Build it in CPU memory and hand ImGui a
+    // dummy id; the D3D8 ImGui render backend (uploading this + drawing ImDrawData) comes later.
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        unsigned char* pixels = nullptr;
+        int w = 0, h = 0;
+        io.Fonts->GetTexDataAsAlpha8(&pixels, &w, &h); // 1 byte/px (4x smaller than RGBA32)
+        io.Fonts->SetTexID((ImTextureID)(intptr_t)1);
+        io.BackendRendererName = "xbox_null";
+    }
+    return;
+#endif
     switch (mImpl.Backend) {
 #ifdef ENABLE_OPENGL
         case WindowBackend::FAST3D_SDL_OPENGL:
@@ -222,11 +243,24 @@ void Fast3dGui::ImGuiBackendNewFrame() {
 }
 
 void Fast3dGui::ImGuiWMNewFrame() {
+#if defined(LUS_XBOX)
+    // The window-manager backend normally feeds ImGui the framebuffer size + dt each frame;
+    // ImGui::NewFrame() asserts on DisplaySize/DeltaTime. Provide them from the Fast3d window.
+    ImGuiIO& io = ImGui::GetIO();
+    auto wnd = Ship::Context::GetRawInstance()->GetWindow();
+    uint32_t w = wnd ? wnd->GetWidth() : 640;
+    uint32_t h = wnd ? wnd->GetHeight() : 480;
+    io.DisplaySize = ImVec2((float)(w ? w : 640), (float)(h ? h : 480));
+    io.DeltaTime = 1.0f / 60.0f;
+    return;
+#endif
     switch (mImpl.Backend) {
+#if !defined(LUS_XBOX)
         case WindowBackend::FAST3D_SDL_OPENGL:
         case WindowBackend::FAST3D_SDL_METAL:
             ImGui_ImplSDL2_NewFrame();
             break;
+#endif
 #ifdef ENABLE_DX11
         case WindowBackend::FAST3D_DXGI_DX11:
             ImGui_ImplWin32_NewFrame();
@@ -243,8 +277,9 @@ void Fast3dGui::RefreshImGuiGamepads() {
     if (mImpl.Backend != WindowBackend::FAST3D_SDL_OPENGL && mImpl.Backend != WindowBackend::FAST3D_SDL_METAL) {
         return;
     }
-
+#if !defined(LUS_XBOX)
     ImGui_ImplSDL2_SetGamepadMode(ImGui_ImplSDL2_GamepadMode_AutoAll, nullptr, 0);
+#endif
 }
 
 void Fast3dGui::ImGuiRenderDrawData(ImDrawData* data) {
@@ -279,6 +314,7 @@ void Fast3dGui::DrawFloatingWindows() {
     }
 
     // OpenGL requires extra platform handling for the GL context
+#if !defined(LUS_XBOX)
     if (mImpl.Backend == WindowBackend::FAST3D_SDL_OPENGL && mImpl.Opengl.Context != nullptr) {
         // Backup window and context before calling RenderPlatformWindowsDefault
         SDL_Window* backupCurrentWindow = SDL_GL_GetCurrentWindow();
@@ -289,7 +325,9 @@ void Fast3dGui::DrawFloatingWindows() {
 
         // Restore GL context for next frame
         SDL_GL_MakeCurrent(backupCurrentWindow, backupCurrentContext);
-    } else {
+    } else
+#endif
+    {
 #ifdef __APPLE__
         // Metal requires additional frame setup to get ImGui ready for drawing floating windows
         if (mImpl.Backend == WindowBackend::FAST3D_SDL_METAL) {

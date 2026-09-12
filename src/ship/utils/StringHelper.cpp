@@ -1,4 +1,5 @@
 #include "ship/utils/StringHelper.h"
+#include <cstdlib>
 
 #if (_MSC_VER)
 #pragma optimize("2", on)

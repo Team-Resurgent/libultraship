@@ -4,6 +4,7 @@
 #include "ship/window/Window.h"
 #include "spdlog/spdlog.h"
 #include <unordered_map>
+#include <cstdio>
 
 namespace Ship {
 O2rArchive::O2rArchive(const std::string& archivePath) : Archive(archivePath) {
@@ -95,13 +96,25 @@ std::shared_ptr<File> O2rArchive::LoadFile(const std::string& filePath) {
 }
 
 bool O2rArchive::Open() {
+#if defined(LUS_XBOX)
+    std::printf("[xbox] O2rArchive::Open zip_open(%s)\n", GetPath().c_str()); std::fflush(stdout);
+    // The disc is read-only; ZIP_CREATE wants write access. Open read-only on Xbox.
+    mZipArchive = zip_open(GetPath().c_str(), ZIP_RDONLY, nullptr);
+#else
     mZipArchive = zip_open(GetPath().c_str(), ZIP_CREATE, nullptr);
+#endif
     if (mZipArchive == nullptr) {
+#if defined(LUS_XBOX)
+        std::printf("[xbox] O2rArchive::Open FAILED for %s\n", GetPath().c_str()); std::fflush(stdout);
+#endif
         SPDLOG_ERROR("Failed to load zip file \"{}\"", GetPath());
         return false;
     }
 
     auto zipNumEntries = zip_get_num_entries(mZipArchive, 0);
+#if defined(LUS_XBOX)
+    std::printf("[xbox] O2rArchive::Open OK, %d entries\n", (int)zipNumEntries); std::fflush(stdout);
+#endif
     for (auto i = 0; i < zipNumEntries; i++) {
         auto zipEntryName = zip_get_name(mZipArchive, i, 0);
 

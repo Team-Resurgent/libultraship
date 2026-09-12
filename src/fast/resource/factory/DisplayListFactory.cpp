@@ -1,3 +1,5 @@
+#include <unordered_map>
+#include <string>
 #include "fast/resource/factory/DisplayListFactory.h"
 #include "fast/resource/type/DisplayList.h"
 #include "spdlog/spdlog.h"

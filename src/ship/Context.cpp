@@ -1,6 +1,7 @@
 #include "ship/Context.h"
 #include "ship/controller/controldevice/controller/mapping/keyboard/KeyboardScancodes.h"
 #include <cstring>
+#include <cstdio>
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <spdlog/sinks/rotating_file_sink.h>
@@ -42,7 +43,9 @@ void Context::DestroyInstance() {
 
 Context::~Context() {
     SPDLOG_TRACE("destruct context");
+#if !defined(LUS_XBOX)
     GetWindow()->SaveWindowToConfig();
+#endif
     // Explicitly destructing everything so that logging is done last.
     mAudio = nullptr;
     mWindow = nullptr;
@@ -233,6 +236,12 @@ bool Context::InitResourceManager(const std::vector<std::string>& archivePaths,
 
     mMainPath = GetConfig()->GetString("Game.Main Archive", GetAppDirectoryPath());
     mPatchesPath = GetConfig()->GetString("Game.Patches Archive", GetAppDirectoryPath() + "/mods");
+#if defined(LUS_XBOX)
+    std::printf("[xbox] InitResourceManager: %u archivePaths, mMainPath=%s\n",
+                (unsigned)archivePaths.size(), mMainPath.c_str());
+    for (const auto& p : archivePaths) std::printf("[xbox]   archive: %s\n", p.c_str());
+    std::fflush(stdout);
+#endif
     if (archivePaths.empty()) {
         std::vector<std::string> paths = std::vector<std::string>();
         paths.push_back(mMainPath);
@@ -246,8 +255,10 @@ bool Context::InitResourceManager(const std::vector<std::string>& archivePaths,
     }
 
     if (!allowEmptyPaths && !GetResourceManager()->IsLoaded()) {
+#if !defined(LUS_XBOX)
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OTR file not found",
                                  "Main OTR file not found. Please generate one", nullptr);
+#endif
         SPDLOG_ERROR("Main OTR file not found!");
 #ifdef __IOS__
         // We need this exit to close the app when we dismiss the dialog
@@ -260,6 +271,11 @@ bool Context::InitResourceManager(const std::vector<std::string>& archivePaths,
 }
 
 bool Context::InitControlDeck(std::shared_ptr<ControlDeck> controlDeck) {
+#if defined(LUS_XBOX)
+    // Xbox port: input is XInput (Phase 2), not SDL game controllers. Skip SDL bring-up.
+    mControlDeck = controlDeck;
+    return true;
+#else
     if (GetControlDeck() != nullptr) {
         return true;
     }
@@ -287,9 +303,13 @@ bool Context::InitControlDeck(std::shared_ptr<ControlDeck> controlDeck) {
     }
 
     return true;
+#endif
 }
 
 bool Context::InitCrashHandler() {
+#if defined(LUS_XBOX)
+    return true; // Xbox: RXDK has its own crash/watson path.
+#else
     if (GetCrashHandler() != nullptr) {
         return true;
     }
@@ -302,9 +322,15 @@ bool Context::InitCrashHandler() {
     }
 
     return true;
+#endif
 }
 
 bool Context::InitAudio(AudioSettings settings) {
+    // Xbox uses the real Audio manager with the silent NullAudioPlayer (Audio.cpp is gated to
+    // select Null on LUS_XBOX). GetAudio() must be non-null: OTRGlobals::Initialize queries
+    // audio backends (UpdateAudioBackendObjects) and the game's audio thread drives it.
+    // DirectSound (XboxAudioPlayer) replaces Null in a later phase.
+    std::printf("[xbox] InitAudio enter\n"); std::fflush(stdout);
     if (GetAudio() != nullptr) {
         return true;
     }
@@ -317,10 +343,14 @@ bool Context::InitAudio(AudioSettings settings) {
     }
 
     GetAudio()->Init();
+    std::printf("[xbox] InitAudio done\n"); std::fflush(stdout);
     return true;
 }
 
 bool Context::InitConsole() {
+    // The Console is the command registry (not the ImGui window); ConsoleWindow::InitElement
+    // registers commands via GetConsole()->AddCommand, so it must exist on Xbox too. The
+    // ImGui ConsoleWindow itself runs inert (no render backend) but must not deref a null console.
     if (GetConsole() != nullptr) {
         return true;
     }
@@ -338,6 +368,22 @@ bool Context::InitConsole() {
 }
 
 bool Context::InitWindow(std::shared_ptr<Window> window) {
+#if defined(LUS_XBOX)
+    // Phase 2: bring the real Fast3dWindow up on Xbox. Init() runs InitWindowManager()
+    // (creates the D3D8 window + rendering backends) and Interpreter::Init() with them.
+    std::printf("[xbox] Context::InitWindow enter\n"); std::fflush(stdout);
+    if (GetWindow() != nullptr) {
+        return true;
+    }
+    mWindow = window;
+    if (GetWindow() == nullptr) {
+        SPDLOG_ERROR("Failed to initialize window");
+        return false;
+    }
+    GetWindow()->Init();
+    std::printf("[xbox] Context::InitWindow done (D3D8 device up)\n"); std::fflush(stdout);
+    return true;
+#else
     if (GetWindow() != nullptr) {
         return true;
     }
@@ -352,9 +398,13 @@ bool Context::InitWindow(std::shared_ptr<Window> window) {
     GetWindow()->Init();
 
     return true;
+#endif
 }
 
 bool Context::InitFileDropMgr() {
+    // Xbox has no file-drop events, but the object must exist: several subsystems
+    // (e.g. Randomizer, SoH_HandleConfigDrop) call GetFileDropMgr()->RegisterDropHandler
+    // unconditionally at init. The handlers simply never fire on console.
     if (GetFileDropMgr() != nullptr) {
         return true;
     }
@@ -537,6 +587,14 @@ std::string Context::GetAppBundlePath() {
 }
 
 std::string Context::GetAppDirectoryPath(const std::string& appName) {
+#if defined(LUS_XBOX)
+    // Xbox: assets (soh.o2r / oot-mq.o2r) ship on the game disc, mounted read-only at D:\,
+    // alongside default.xbe. Archive lookup (LocateFileAcrossAppDirs) resolves relative to
+    // this. Config/save writes to the read-only disc fail silently (ofstream, no throw), which
+    // is fine for bring-up; a writable T:\ path for saves comes with the save-system phase.
+    (void)appName;
+    return "D:";
+#endif
 #if defined(__ANDROID__)
     const char* externaldir = SDL_AndroidGetExternalStoragePath();
     if (externaldir != NULL) {

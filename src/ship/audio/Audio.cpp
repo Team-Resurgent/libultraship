@@ -26,10 +26,14 @@ void Audio::InitAudioPlayer() {
             mAudioPlayer = std::make_shared<CoreAudioAudioPlayer>(this->mAudioSettings);
             break;
 #endif
+#if !defined(LUS_XBOX)
         case AudioBackend::SDL:
             mAudioPlayer = std::make_shared<SDLAudioPlayer>(this->mAudioSettings);
             break;
+#endif
         default:
+            // Xbox: audio output (DirectSound XboxAudioPlayer) is Phase B; use the silent
+            // NullAudioPlayer so the mixer runs and the game boots without sound.
             mAudioPlayer = std::make_shared<NullAudioPlayer>(this->mAudioSettings);
             break;
     }
@@ -51,7 +55,9 @@ void Audio::Init() {
 #ifdef __APPLE__
     mAvailableAudioBackends->push_back(AudioBackend::COREAUDIO);
 #endif
+#if !defined(LUS_XBOX)
     mAvailableAudioBackends->push_back(AudioBackend::SDL);
+#endif
     mAvailableAudioBackends->push_back(AudioBackend::NUL);
 
     SetCurrentAudioBackend(GetSavedAudioBackend());

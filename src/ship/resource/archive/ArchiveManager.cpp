@@ -1,6 +1,7 @@
 #include "ship/resource/archive/ArchiveManager.h"
 
 #include <filesystem>
+#include <cstdio>
 #include "spdlog/spdlog.h"
 
 #include "ship/resource/archive/Archive.h"
@@ -215,6 +216,30 @@ std::vector<std::string> ArchiveManager::GetArchiveListInPaths(const std::vector
 
     for (const auto& archivePath : archivePaths) {
         if (archivePath.length() > 0) {
+#if defined(LUS_XBOX)
+            // std::filesystem::absolute() does not recognise Xbox drive paths ("D:\..") as
+            // absolute and prepends the CWD, corrupting them ("D:\/D:/soh.o2r"). Xbox archive
+            // paths are already fully qualified (disc D:\), so use them verbatim.
+            if (std::filesystem::is_directory(archivePath)) {
+                bool hasAssetFiles = false;
+                for (const auto& p : std::filesystem::directory_iterator(archivePath)) {
+                    const auto ext = p.path().extension().string();
+                    if (StringHelper::IEquals(ext, ".otr") || StringHelper::IEquals(ext, ".zip") ||
+                        StringHelper::IEquals(ext, ".mpq") || StringHelper::IEquals(ext, ".o2r")) {
+                        fileList.push_back(p.path().string());
+                        hasAssetFiles = true;
+                    }
+                }
+                if (!hasAssetFiles) {
+                    fileList.push_back(archivePath);
+                }
+            } else if (std::filesystem::is_regular_file(archivePath)) {
+                fileList.push_back(archivePath);
+            } else {
+                SPDLOG_WARN("The archive at path {} does not exist", archivePath);
+            }
+            continue;
+#endif
             if (std::filesystem::is_directory(archivePath)) {
                 bool hasAssetFiles = false;
                 for (const auto& p : std::filesystem::directory_iterator(archivePath)) {
@@ -299,6 +324,10 @@ std::shared_ptr<Archive> ArchiveManager::AddArchive(std::shared_ptr<Archive> arc
             mDirectories.insert(dir);
         }
     }
+#if defined(LUS_XBOX)
+    std::printf("[xbox] AddArchive done: %s (%u archives, gameVer=%u)\n", archive->GetPath().c_str(),
+                (unsigned)mArchives.size(), (unsigned)archive->GetGameVersion()); std::fflush(stdout);
+#endif
     return archive;
 }
 

@@ -3,12 +3,16 @@
 #include "ship/config/ConsoleVariable.h"
 #include "ship/window/Window.h"
 #include "ship/window/gui/Gui.h"
+#include <cstdio>
 
 namespace Ship {
 GuiWindow::GuiWindow(const std::string& consoleVariable, bool isVisible, const std::string& name, ImVec2 originalSize,
                      uint32_t windowFlags)
     : GuiElement(isVisible), mName(name), mVisibilityConsoleVariable(consoleVariable), mOriginalSize(originalSize),
       mWindowFlags(windowFlags) {
+#if defined(LUS_XBOX)
+    std::printf("[xbox] GuiWindow ctor: %s\n", name.c_str()); std::fflush(stdout);
+#endif
     if (!mVisibilityConsoleVariable.empty()) {
         mIsVisible = Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger(
             mVisibilityConsoleVariable.c_str(), mIsVisible);

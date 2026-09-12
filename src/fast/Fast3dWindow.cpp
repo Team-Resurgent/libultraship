@@ -5,6 +5,12 @@
 #include "ship/controller/controldeck/ControlDeck.h"
 #include "ship/config/ConsoleVariable.h"
 #include "fast/interpreter.h"
+#if defined(LUS_XBOX)
+// Xbox uses the D3D8 window + rendering backends; the desktop backend headers pull SDL/DXGI/GL/Metal.
+#include "fast/backends/gfx_xbox_window.h"
+#include "fast/backends/gfx_xbox_d3d8.h"
+#include "fast/backends/gfx_window_manager_api.h"
+#else
 #include "fast/backends/gfx_sdl.h"
 #include "fast/backends/gfx_dxgi.h"
 #include "fast/backends/gfx_opengl.h"
@@ -12,10 +18,12 @@
 #include "fast/backends/gfx_direct3d_common.h"
 #include "fast/backends/gfx_direct3d11.h"
 #include "fast/backends/gfx_window_manager_api.h"
+#endif
 
 #include "fast/Fast3dGui.h"
 
 #include <fstream>
+#include <cstdio>
 
 namespace Fast {
 
@@ -23,11 +31,17 @@ extern void GfxSetInstance(std::shared_ptr<Interpreter> gfx);
 
 Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui, std::shared_ptr<FastMouseStateManager> mouseStateManager)
     : Ship::Window(gui, mouseStateManager) {
+#if defined(LUS_XBOX)
+    std::printf("[xbox] Fast3dWindow main-ctor: base Window built\n"); std::fflush(stdout);
+#endif
     mWindowManagerApi = nullptr;
     mRenderingApi = nullptr;
     mInterpreter = std::make_shared<Interpreter>();
     GfxSetInstance(mInterpreter);
 
+#if defined(LUS_XBOX)
+    AddAvailableWindowBackend(WindowBackend::FAST3D_XBOX_D3D8);
+#else
 #ifdef _WIN32
     AddAvailableWindowBackend(WindowBackend::FAST3D_DXGI_DX11);
 #endif
@@ -37,6 +51,7 @@ Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui, std::shared_ptr<FastM
     }
 #endif
     AddAvailableWindowBackend(WindowBackend::FAST3D_SDL_OPENGL);
+#endif
 }
 
 Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui)
@@ -45,6 +60,9 @@ Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui)
 
 Fast3dWindow::Fast3dWindow(std::vector<std::shared_ptr<Ship::GuiWindow>> guiWindows)
     : Fast3dWindow(std::make_shared<Fast3dGui>(guiWindows)) {
+#if defined(LUS_XBOX)
+    std::printf("[xbox] Fast3dWindow(vector) constructed\n"); std::fflush(stdout);
+#endif
 }
 
 Fast3dWindow::Fast3dWindow() : Fast3dWindow(std::vector<std::shared_ptr<Ship::GuiWindow>>()) {
@@ -137,6 +155,12 @@ void Fast3dWindow::InitWindowManager() {
     SetWindowBackend(GetSavedWindowBackend());
 
     switch (GetWindowBackend()) {
+#if defined(LUS_XBOX)
+        case WindowBackend::FAST3D_XBOX_D3D8:
+            mWindowManagerApi = new GfxWindowBackendXbox();
+            mRenderingApi = new GfxRenderingAPIXbox(static_cast<GfxWindowBackendXbox*>(mWindowManagerApi));
+            break;
+#endif
 #ifdef ENABLE_DX11
         case WindowBackend::FAST3D_DXGI_DX11:
             mWindowManagerApi = new GfxWindowBackendDXGI();
@@ -204,16 +228,28 @@ bool Fast3dWindow::DrawAndRunGraphicsCommands(Gfx* commands, const std::unordere
     auto gui = wnd->GetGui();
     // Setup mouse state manager
     wnd->GetMouseStateManager()->StartFrame();
+#if defined(LUS_XBOX)
+    { static unsigned long f=0; if((f++%60)==0) std::printf("[xbox] DrawAndRun: gui->StartDraw (f=%lu)\n", f-1); std::fflush(stdout); }
+#endif
     // Setup of the backend frames and draw initial Window and GUI menus
     gui->StartDraw();
+#if defined(LUS_XBOX)
+    { static unsigned long f=0; if((f++%60)==0){ std::printf("[xbox] DrawAndRun: interpreter Run\n"); std::fflush(stdout);} }
+#endif
     // Setup game framebuffers to match available window space
     mInterpreter->StartFrame();
     // Execute the games gfx commands
     mInterpreter->Run(commands, mtxReplacements);
+#if defined(LUS_XBOX)
+    { static unsigned long f=0; if((f++%60)==0){ std::printf("[xbox] DrawAndRun: gui->EndDraw\n"); std::fflush(stdout);} }
+#endif
     // Renders the game frame buffer to the final window and finishes the GUI
     gui->EndDraw();
     // Finalize swap buffers
     mInterpreter->EndFrame();
+#if defined(LUS_XBOX)
+    { static unsigned long f=0; if((f++%60)==0){ std::printf("[xbox] DrawAndRun: frame done\n"); std::fflush(stdout);} }
+#endif
 
     return true;
 }

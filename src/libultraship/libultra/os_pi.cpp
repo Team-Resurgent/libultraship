@@ -3,8 +3,12 @@
 
 extern "C" {
 
+#if !defined(LUS_XBOX)
+// On the Xbox title link soh/soh/stubs.c also defines osCreatePiManager; let that
+// comprehensive libultra stub set own it (both are no-ops) to avoid a duplicate symbol.
 void osCreatePiManager(OSPri pri, OSMesgQueue* cmdQ, OSMesg* cmdBuf, int32_t cmdMsgCnt) {
 }
+#endif
 
 int32_t osPiReadIo(uint32_t a, uint32_t* b) {
     return 0;

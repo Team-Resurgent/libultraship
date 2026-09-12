@@ -162,5 +162,9 @@ class AudioPlayer {
 #include "CoreAudioAudioPlayer.h"
 #endif
 
+#if defined(LUS_XBOX)
+#include "XboxAudioPlayer.h"
+#else
 #include "SDLAudioPlayer.h"
+#endif
 #include "NullAudioPlayer.h"
