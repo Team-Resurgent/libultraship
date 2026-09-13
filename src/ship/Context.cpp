@@ -236,12 +236,6 @@ bool Context::InitResourceManager(const std::vector<std::string>& archivePaths,
 
     mMainPath = GetConfig()->GetString("Game.Main Archive", GetAppDirectoryPath());
     mPatchesPath = GetConfig()->GetString("Game.Patches Archive", GetAppDirectoryPath() + "/mods");
-#if defined(LUS_XBOX)
-    std::printf("[xbox] InitResourceManager: %u archivePaths, mMainPath=%s\n",
-                (unsigned)archivePaths.size(), mMainPath.c_str());
-    for (const auto& p : archivePaths) std::printf("[xbox]   archive: %s\n", p.c_str());
-    std::fflush(stdout);
-#endif
     if (archivePaths.empty()) {
         std::vector<std::string> paths = std::vector<std::string>();
         paths.push_back(mMainPath);
@@ -330,7 +324,6 @@ bool Context::InitAudio(AudioSettings settings) {
     // select Null on LUS_XBOX). GetAudio() must be non-null: OTRGlobals::Initialize queries
     // audio backends (UpdateAudioBackendObjects) and the game's audio thread drives it.
     // DirectSound (XboxAudioPlayer) replaces Null in a later phase.
-    std::printf("[xbox] InitAudio enter\n"); std::fflush(stdout);
     if (GetAudio() != nullptr) {
         return true;
     }
@@ -343,7 +336,6 @@ bool Context::InitAudio(AudioSettings settings) {
     }
 
     GetAudio()->Init();
-    std::printf("[xbox] InitAudio done\n"); std::fflush(stdout);
     return true;
 }
 
@@ -371,7 +363,6 @@ bool Context::InitWindow(std::shared_ptr<Window> window) {
 #if defined(LUS_XBOX)
     // Phase 2: bring the real Fast3dWindow up on Xbox. Init() runs InitWindowManager()
     // (creates the D3D8 window + rendering backends) and Interpreter::Init() with them.
-    std::printf("[xbox] Context::InitWindow enter\n"); std::fflush(stdout);
     if (GetWindow() != nullptr) {
         return true;
     }
@@ -381,7 +372,6 @@ bool Context::InitWindow(std::shared_ptr<Window> window) {
         return false;
     }
     GetWindow()->Init();
-    std::printf("[xbox] Context::InitWindow done (D3D8 device up)\n"); std::fflush(stdout);
     return true;
 #else
     if (GetWindow() != nullptr) {

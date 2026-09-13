@@ -27,6 +27,7 @@ struct ShaderProgram {
     // Derived buf_vbo layout (floats). See gfx_cc_get_features / the GL backend attrib walk.
     uint32_t numFloats = 4;   // per-vertex stride in floats
     int32_t uv0Off = -1;      // float offset of tex0 UV, or -1
+    int32_t uv1Off = -1;      // float offset of tex1 UV, or -1
     int32_t input0Off = -1;   // float offset of the first colour input, or -1
     uint32_t inputSize = 4;   // 3 (RGB) or 4 (RGBA) per input
     // Per-texture shader-clamp flags (S,T). Fast3D defers non-edge clamping to the shader (it
@@ -34,6 +35,28 @@ struct ShaderProgram {
     // path can't clamp per-pixel, so approximate it with sampler CLAMP on these axes at draw.
     bool clampS[2] = { false, false };
     bool clampT[2] = { false, false };
+
+    // N64 colour-combiner definition (from CCFeatures), lowered to an NV2A register-combiner
+    // pixel shader. c[cycle][channel(0=rgb,1=alpha)][A,B,C,D] holds SHADER_* input constants; the
+    // do_* flags pick the per-cycle form (single=D, multiply=A*C, mix=(A-B)*C+B, general=(A-B)*C+D).
+    int cc[2][2][4] = {};
+    bool doSingle[2][2] = {};
+    bool doMultiply[2][2] = {};
+    bool doMix[2][2] = {};
+    bool opt2cyc = false;
+    // Alpha-test (Fast3D bakes these into the shader as a discard; the fixed-function combiner
+    // path can't, so approximate with D3D alpha test). texture_edge = discard near-zero alpha
+    // (cutout edges: leaves/fences/the moon disc); alpha_threshold = discard below a threshold.
+    bool textureEdge = false;
+    bool alphaThreshold = false;
+    // buf_vbo float offsets of combiner colour inputs 2/3 (SHADER_INPUT_2/3), or -1. Input 1 is
+    // the per-vertex shade (input0Off, fed as vertex diffuse -> V0); inputs 2/3 are treated as
+    // primitive-constant (PRIM/ENV) and fed as combiner constants C0/C1 from the first vertex.
+    int32_t input2Off = -1;
+    int32_t input3Off = -1;
+    // Cached NV2A pixel-shader handle for this combiner (0 = not built; built lazily at draw).
+    uint32_t psHandle = 0;
+    bool psTried = false;
 };
 
 class GfxRenderingAPIXbox : public GfxRenderingAPI {
@@ -106,6 +129,36 @@ class GfxRenderingAPIXbox : public GfxRenderingAPI {
     std::vector<void*> mTextures;
     uint32_t mBoundTexture[2] = { 0, 0 }; // per-tile bound texId
     uint32_t mActiveTile = 0;
+
+    // Render-to-texture framebuffers. Index 0 is the window backbuffer (its color/depth
+    // surfaces are borrowed from the device in Init; colorTex is null — the backbuffer can't
+    // be sampled as a texture). Indices >= 1 are real RTTs: a D3DUSAGE_RENDERTARGET texture
+    // plus its surface-level-0 render surface and an optional depth-stencil surface. The
+    // interpreter draws the game's auxiliary effects (Link in the pause menu, lens of truth,
+    // the MSAA/scale game buffer, ...) into these and then samples them back via SelectTextureFb.
+    struct XboxFramebuffer {
+        void* colorTex = nullptr;  // IDirect3DTexture8*  (null for fb 0)
+        void* colorSurf = nullptr; // IDirect3DSurface8*  (render target)
+        void* depthSurf = nullptr; // IDirect3DSurface8*  (depth-stencil, may be null)
+        uint32_t width = 0;
+        uint32_t height = 0;
+        bool hasDepth = false;
+        bool isWindow = false; // fb 0: surfaces are borrowed, never released
+        bool invertY = false;  // openglInvertY flag (unused on D3D top-left, tracked for parity)
+    };
+    std::vector<XboxFramebuffer> mFramebuffers; // [0] = backbuffer, created in Init
+    int mCurrentFb = 0;                         // fb currently bound as render target
+    // Sentinel mBoundTexture value meaning "an fb color texture is bound" (not an mTextures
+    // slot). DrawTriangles only tests mBoundTexture[0] != 0 and does not index mTextures in the
+    // textured path, so any non-zero, out-of-range value marks the draw as textured safely.
+    static const uint32_t kFbBoundSentinel = 0xF0000000u;
+
+    // The N64 colour combiner ((A-B)*C+D per cycle) is lowered to an NV2A register-combiner pixel
+    // shader (D3DPIXELSHADERDEF) and cached per ShaderProgram; fixed-function MODULATE can't
+    // express PRIM/ENV/texel-on-texel/2-cycle blends (wrong colour + over-opaque effect sprites).
+    // 1x1 white 2D texture bound to a combiner sampler stage that lacks a real texture, so xemu's
+    // pixel-shader path never sees an unbound sampler (it asserts on texture dimensions otherwise).
+    void* mDummyTex = nullptr; // IDirect3DTexture8*
 
     bool mUseAlpha = false;
     // Base sampler address mode resolved by SetSamplerParameters (wrap/mirror/clamp), per sampler.

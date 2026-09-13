@@ -324,10 +324,6 @@ std::shared_ptr<Archive> ArchiveManager::AddArchive(std::shared_ptr<Archive> arc
             mDirectories.insert(dir);
         }
     }
-#if defined(LUS_XBOX)
-    std::printf("[xbox] AddArchive done: %s (%u archives, gameVer=%u)\n", archive->GetPath().c_str(),
-                (unsigned)mArchives.size(), (unsigned)archive->GetGameVersion()); std::fflush(stdout);
-#endif
     return archive;
 }
 

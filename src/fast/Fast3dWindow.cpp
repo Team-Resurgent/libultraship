@@ -31,9 +31,6 @@ extern void GfxSetInstance(std::shared_ptr<Interpreter> gfx);
 
 Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui, std::shared_ptr<FastMouseStateManager> mouseStateManager)
     : Ship::Window(gui, mouseStateManager) {
-#if defined(LUS_XBOX)
-    std::printf("[xbox] Fast3dWindow main-ctor: base Window built\n"); std::fflush(stdout);
-#endif
     mWindowManagerApi = nullptr;
     mRenderingApi = nullptr;
     mInterpreter = std::make_shared<Interpreter>();
@@ -60,9 +57,6 @@ Fast3dWindow::Fast3dWindow(std::shared_ptr<Ship::Gui> gui)
 
 Fast3dWindow::Fast3dWindow(std::vector<std::shared_ptr<Ship::GuiWindow>> guiWindows)
     : Fast3dWindow(std::make_shared<Fast3dGui>(guiWindows)) {
-#if defined(LUS_XBOX)
-    std::printf("[xbox] Fast3dWindow(vector) constructed\n"); std::fflush(stdout);
-#endif
 }
 
 Fast3dWindow::Fast3dWindow() : Fast3dWindow(std::vector<std::shared_ptr<Ship::GuiWindow>>()) {
@@ -228,28 +222,16 @@ bool Fast3dWindow::DrawAndRunGraphicsCommands(Gfx* commands, const std::unordere
     auto gui = wnd->GetGui();
     // Setup mouse state manager
     wnd->GetMouseStateManager()->StartFrame();
-#if defined(LUS_XBOX)
-    { static unsigned long f=0; if((f++%60)==0) std::printf("[xbox] DrawAndRun: gui->StartDraw (f=%lu)\n", f-1); std::fflush(stdout); }
-#endif
     // Setup of the backend frames and draw initial Window and GUI menus
     gui->StartDraw();
-#if defined(LUS_XBOX)
-    { static unsigned long f=0; if((f++%60)==0){ std::printf("[xbox] DrawAndRun: interpreter Run\n"); std::fflush(stdout);} }
-#endif
     // Setup game framebuffers to match available window space
     mInterpreter->StartFrame();
     // Execute the games gfx commands
     mInterpreter->Run(commands, mtxReplacements);
-#if defined(LUS_XBOX)
-    { static unsigned long f=0; if((f++%60)==0){ std::printf("[xbox] DrawAndRun: gui->EndDraw\n"); std::fflush(stdout);} }
-#endif
     // Renders the game frame buffer to the final window and finishes the GUI
     gui->EndDraw();
     // Finalize swap buffers
     mInterpreter->EndFrame();
-#if defined(LUS_XBOX)
-    { static unsigned long f=0; if((f++%60)==0){ std::printf("[xbox] DrawAndRun: frame done\n"); std::fflush(stdout);} }
-#endif
 
     return true;
 }

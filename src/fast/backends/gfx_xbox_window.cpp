@@ -74,9 +74,7 @@ void GfxWindowBackendXbox::Init(const char* gameName, const char* apiName, bool 
     windowImpl.Backend = WindowBackend::FAST3D_XBOX_D3D8;
     auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
     if (gui != nullptr) {
-        std::printf("[xbox] backend: calling Gui::Init (ImGui context)\n"); std::fflush(stdout);
         std::dynamic_pointer_cast<Fast3dGui>(gui)->Init(windowImpl);
-        std::printf("[xbox] backend: Gui::Init done\n"); std::fflush(stdout);
     }
 }
 
@@ -177,10 +175,6 @@ void GfxWindowBackendXbox::SwapBuffersBegin() {
 void GfxWindowBackendXbox::SwapBuffersEnd() {
     if (mDevice) {
         Dev(mDevice)->Present(NULL, NULL, NULL, NULL);
-        static unsigned long sFrame = 0;
-        if ((sFrame++ % 60) == 0) {
-            std::printf("[xbox] present frame %lu\n", sFrame - 1); std::fflush(stdout);
-        }
     }
 }
 

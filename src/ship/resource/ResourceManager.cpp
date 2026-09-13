@@ -53,23 +53,13 @@ ResourceManager::ResourceManager() {
 
 void ResourceManager::Init(const std::vector<std::string>& archivePaths,
                            const std::unordered_set<uint32_t>& validHashes, int32_t reservedThreadCount) {
-#if defined(LUS_XBOX)
-    std::printf("[xbox] ResourceManager::Init: making ArchiveManager\n"); std::fflush(stdout);
-#endif
     mResourceLoader = std::make_shared<ResourceLoader>();
     mArchiveManager = std::make_shared<ArchiveManager>();
     GetArchiveManager()->Init(archivePaths, validHashes);
-#if defined(LUS_XBOX)
-    std::printf("[xbox] ResourceManager::Init: ArchiveManager done, IsLoaded=%d, hw_conc=%u\n",
-                (int)IsLoaded(), (unsigned)std::thread::hardware_concurrency()); std::fflush(stdout);
-#endif
 
     // the extra `- 1` is because we reserve an extra thread for spdlog
     size_t threadCount = std::max(1, (int32_t)(std::thread::hardware_concurrency() - reservedThreadCount - 1));
     mThreadPool = std::make_shared<BS::thread_pool>(threadCount);
-#if defined(LUS_XBOX)
-    std::printf("[xbox] ResourceManager::Init: thread_pool(%u) up\n", (unsigned)threadCount); std::fflush(stdout);
-#endif
 
     if (!IsLoaded()) {
         // Nothing ever unpauses the thread pool since nothing will ever try to load the archive again.

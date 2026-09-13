@@ -22,17 +22,11 @@ namespace Ship {
 #define TOGGLE_PAD_BTN ImGuiKey_GamepadBack
 
 Gui::Gui(std::vector<std::shared_ptr<GuiWindow>> guiWindows) : mNeedsConsoleVariableSave(false) {
-#if defined(LUS_XBOX)
-    std::printf("[xbox] Gui ctor: begin, %u incoming windows\n", (unsigned)guiWindows.size()); std::fflush(stdout);
-#endif
     mGameOverlay = std::make_shared<GameOverlay>();
 
     for (auto& guiWindow : guiWindows) {
         AddGuiWindow(guiWindow);
     }
-#if defined(LUS_XBOX)
-    std::printf("[xbox] Gui ctor: incoming added; adding default windows\n"); std::fflush(stdout);
-#endif
 
     // Add default windows if we don't already have one by the name
     if (GetGuiWindow("Stats") == nullptr) {
@@ -56,9 +50,6 @@ Gui::Gui(std::vector<std::shared_ptr<GuiWindow>> guiWindows) : mNeedsConsoleVari
     if (GetGuiWindow("FileBrowser") == nullptr) {
         AddGuiWindow(std::make_shared<FileBrowserWindow>("", true, "FileBrowser"));
     }
-#if defined(LUS_XBOX)
-    std::printf("[xbox] Gui ctor: end\n"); std::fflush(stdout);
-#endif
 }
 
 Gui::Gui() : Gui(std::vector<std::shared_ptr<GuiWindow>>()) {
